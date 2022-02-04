@@ -1,0 +1,56 @@
+name: Demo2-Pipeline
+
+env:
+  commits: '[{"commitId": "${{ github.sha }}" }]'
+  repository: "${{ github.repository }}"
+  run_number: "${{ github.run_number }}"
+  job: ${{ github.job }}
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+     
+     steps:
+      - name: send artifacts to servicenow
+        uses: rapdev-io/sn-devops-artifact@v2.0.1
+        with:
+          instance-name: ${{ secrets.INSTANCE_NAME }}
+          devops-integration-user-name: ${{ secrets.DEVOPS_INTEGRATION_USER_NAME }}
+          devops-integration-user-pass: ${{ secrets.DEVOPS_INTEGRATION_USER_PASS }}
+          tool-id: ${{ secrets.TOOL_ID }}
+          context-github: ${{ toJSON(github) }}
+          artifacts: '[{"name": "snc-devops-demo.war", "version": "1.${{env.run_number}}.0", "semanticVersion": "1.${{env.run_number}}.0", "repositoryName": "${{env.repository}}"}]'
+          
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    steps:
+    - name: create servicenow package
+      uses: rapdev-io/sn-devops-package@v2.0.1
+      with:
+        instance-name: ${{ secrets.INSTANCE_NAME }}
+        devops-integration-user-name: ${{ secrets.DEVOPS_INTEGRATION_USER_NAME }}
+        devops-integration-user-pass: ${{ secrets.DEVOPS_INTEGRATION_USER_PASS }}
+        tool-id: ${{ secrets.TOOL_ID }}
+        context-github: ${{ toJSON(github) }}
+        artifacts: '[{"name": "snc-devops-demo.war", "version": "1.${{env.run_number}}.0", "semanticVersion": "1.${{env.run_number}}.0", "repositoryName": "${{env.repository}}", "stageName": "${{env.job}}", "pipelineName": "${{github.workflow}}", "taskExecutionNumber": "${{github.run_number}}"}]'
+        
+  prod_deploy:
+    needs: package
+    environment: Production
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: run script
+        run: echo deploying
